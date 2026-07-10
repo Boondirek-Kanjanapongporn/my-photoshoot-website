@@ -6,7 +6,9 @@ export function ProfileCard({ onPhotoClick }: Props) {
   return (
     <section className="profile-card">
       <div className="profile-info">
-        <h2 className="profile-name">Boondirek Kanjanapongporn</h2>
+        <h2 className="profile-name">
+          Boondirek Kanjanapongporn (Boon - บุ๋น)
+        </h2>
         <dl className="profile-details">
           <div className="profile-detail">
             <dt>Age</dt>
