@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { FlatPhoto } from "../types";
 
 interface Props {
@@ -9,10 +9,13 @@ interface Props {
 }
 
 const THUMB_WINDOW = 7;
+const SWIPE_THRESHOLD = 50; // minimum px distance to count as a swipe
 
 export function Lightbox({ photos, currentIndex, onClose, onNavigate }: Props) {
   const total = photos.length;
   const current = photos[currentIndex];
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
 
   const goTo = useCallback(
     (index: number) => onNavigate((index + total) % total),
@@ -28,6 +31,34 @@ export function Lightbox({ photos, currentIndex, onClose, onNavigate }: Props) {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [currentIndex, goTo, onClose]);
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+
+    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+    const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+
+    // Only treat as a swipe if horizontal movement dominates vertical
+    // (so vertical scrolling on the overlay still works normally)
+    if (
+      Math.abs(deltaX) > SWIPE_THRESHOLD &&
+      Math.abs(deltaX) > Math.abs(deltaY)
+    ) {
+      if (deltaX < 0) {
+        goTo(currentIndex + 1); // swiped left -> next photo
+      } else {
+        goTo(currentIndex - 1); // swiped right -> previous photo
+      }
+    }
+
+    touchStartX.current = null;
+    touchStartY.current = null;
+  }
 
   const thumbIndices = useMemo(() => {
     const half = Math.floor(THUMB_WINDOW / 2);
@@ -63,7 +94,11 @@ export function Lightbox({ photos, currentIndex, onClose, onNavigate }: Props) {
           ✕
         </button>
 
-        <div className="lightbox-main">
+        <div
+          className="lightbox-main"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           <button
             type="button"
             className="lightbox-arrow left"
