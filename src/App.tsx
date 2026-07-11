@@ -5,9 +5,9 @@ import { CameraTabs } from "./components/CameraTabs";
 import { CameraSpecs } from "./components/CameraSpecs";
 import { CountrySection } from "./components/CountrySection";
 import { Lightbox } from "./components/Lightbox";
+import { CAMERAS } from "./data/cameras";
 import { ProfileCard } from "./components/ProfileCard";
 import { SimpleLightbox } from "./components/SimpleLightbox";
-import { CAMERAS } from "./data/cameras";
 import type { FlatPhoto, Manifest } from "./types";
 import "./App.css";
 
@@ -39,40 +39,34 @@ function App() {
     [activeCamera],
   );
 
-  // Build flat photo lists AND per-country groupings for every camera up front,
-  // so each camera's gallery only needs to be computed once, not on every tab switch.
-  const photosByCamera = useMemo(() => {
-    const result = new Map<
-      string,
-      { flat: FlatPhoto[]; byCountry: Map<string, FlatPhoto[]> }
-    >();
-    if (!manifest) return result;
-
-    for (const camera of CAMERAS) {
-      const flat: FlatPhoto[] = [];
-      const byCountry = new Map<string, FlatPhoto[]>();
-
-      for (const country of camera.countries) {
-        const files = manifest[camera.key]?.[country.key] ?? [];
-        const countryPhotos: FlatPhoto[] = files.map((filename, i) => ({
-          camera: camera.key,
+  const flatPhotos: FlatPhoto[] = useMemo(() => {
+    if (!manifest) return [];
+    const photos: FlatPhoto[] = [];
+    for (const country of activeCameraConfig.countries) {
+      const files = manifest[activeCameraConfig.key]?.[country.key] ?? [];
+      for (const filename of files) {
+        photos.push({
+          camera: activeCameraConfig.key,
           country: country.key,
           filename,
-          src: buildSrc(camera.key, country.key, filename),
-          globalIndex: flat.length + i,
-        }));
-        flat.push(...countryPhotos);
-        byCountry.set(country.key, countryPhotos);
+          src: buildSrc(activeCameraConfig.key, country.key, filename),
+          globalIndex: photos.length,
+        });
       }
-
-      result.set(camera.key, { flat, byCountry });
     }
+    return photos;
+  }, [manifest, activeCameraConfig]);
 
-    return result;
-  }, [manifest]);
-
-  const activePhotos = photosByCamera.get(activeCamera);
-  const activeFlatPhotos = activePhotos?.flat ?? [];
+  const photosByCountry = useMemo(() => {
+    const map = new Map<string, FlatPhoto[]>();
+    for (const country of activeCameraConfig.countries) {
+      map.set(
+        country.key,
+        flatPhotos.filter((p) => p.country === country.key),
+      );
+    }
+    return map;
+  }, [flatPhotos, activeCameraConfig]);
 
   function handleTabChange(key: string) {
     setActiveCamera(key);
@@ -101,41 +95,24 @@ function App() {
           {manifest === null && (
             <p className="status-message">Loading photos…</p>
           )}
-
-          {manifest !== null &&
-            CAMERAS.map((camera) => {
-              const data = photosByCamera.get(camera.key);
-              const isActive = camera.key === activeCamera;
-              const hasPhotos = (data?.flat.length ?? 0) > 0;
-
-              return (
-                <div
-                  key={camera.key}
-                  className="camera-gallery"
-                  style={{ display: isActive ? "block" : "none" }}
-                  aria-hidden={!isActive}
-                >
-                  {!hasPhotos && (
-                    <p className="status-message">
-                      No photos found for this camera yet.
-                    </p>
-                  )}
-                  {camera.countries.map((country) => (
-                    <CountrySection
-                      key={country.key}
-                      label={country.label}
-                      photos={data?.byCountry.get(country.key) ?? []}
-                      onPhotoClick={(index) => setLightboxIndex(index)}
-                    />
-                  ))}
-                </div>
-              );
-            })}
+          {manifest !== null && flatPhotos.length === 0 && (
+            <p className="status-message">
+              No photos found for this camera yet.
+            </p>
+          )}
+          {activeCameraConfig.countries.map((country) => (
+            <CountrySection
+              key={country.key}
+              label={country.label}
+              photos={photosByCountry.get(country.key) ?? []}
+              onPhotoClick={(index) => setLightboxIndex(index)}
+            />
+          ))}
         </main>
 
         {lightboxIndex !== null && (
           <Lightbox
-            photos={activeFlatPhotos}
+            photos={flatPhotos}
             currentIndex={lightboxIndex}
             onClose={() => setLightboxIndex(null)}
             onNavigate={setLightboxIndex}
